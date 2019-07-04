@@ -1,19 +1,27 @@
-/*
-    Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleWrite.cpp
-    Ported to Arduino ESP32 by Evandro Copercini
-*/
+//This example code is in the Public Domain (or CC0 licensed, at your option.)
+//By Evandro Copercini - 2018
+//
+//This example creates a bridge between Serial and Classical Bluetooth (SPP)
+//and also demonstrate that SerialBT have the same functionalities of a normal Serial
 
-//std::string value;
-#include <BLEDevice.h>
-#include <BLEUtils.h>
-#include <BLEServer.h>
+#include "BluetoothSerial.h"
 
-// See the following for generating UUIDs:
-// https://www.uuidgenerator.net/
+//#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
+//#error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
+//#endif
 
-#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+BluetoothSerial SerialBT;
 
+int entrada;
+
+//PWM
+const int ledPin = 13;  // 16 corresponds to GPIO16
+const int freq = 10000;
+const int ledChannel = 0;
+const int resolution = 12;
+int duty;
+
+//FRECUENCIA
 const byte        interruptPin = 23;              // Assign the interrupt pin
 volatile uint64_t StartValue;                     // First interrupt value
 volatile uint64_t PeriodCount;                    // period in counts of 0.000001 of a second
@@ -51,79 +59,121 @@ char * uintToStr( const uint64_t num, char *str )
   return str;
 }
 
-class MyCallbacks: public BLECharacteristicCallbacks {
-    void onWrite(BLECharacteristic *pCharacteristic) {
-      std::string value = pCharacteristic->getValue();
-
-      int fregInt = Freg;
-      float litros = (0.0004028)*Freg + 0.01664;
-      
-
-      if (value.length() > 0) {
-        Serial.println("*********");
-        Serial.print("New value: ");
-        for (int i = 0; i < value.length(); i++){
-          Serial.print(value[i]);
-        }            
-        Serial.println();
-        Serial.println("*********");
-        if(value=="A"){
-          Serial.println("hola");
-          pCharacteristic->setValue(litros);
-          Serial.println(fregInt);
-        }else if(value=="B"){
-          Serial.println("adios");
-          pCharacteristic->setValue("OFF");
-//          digitalWrite(led,LOW);
-        }
-      }
-    }
-};
+//SETUP
 
 void setup() {
   Serial.begin(115200);
 
+  //PWM
+  ledcSetup(ledChannel, freq, resolution);
+  ledcAttachPin(ledPin, ledChannel);
+  
+
+  //PARA FRECUENCIA
   pinMode(interruptPin, INPUT_PULLUP);                                            // sets pin high
   attachInterrupt(digitalPinToInterrupt(interruptPin), handleInterrupt, RISING); // attaches pin to interrupt on Falling Edge
   timer = timerBegin(0, 80, true);
 
   timerStart(timer); 
 
-  Serial.println("\n\n");
-  Serial.println("1- Download and install an BLE scanner app in your phone");
-  Serial.println("2- Scan for BLE devices in the app");
-  Serial.println("3- Connect to MyESP32");
-  Serial.println("4- Go to CUSTOM CHARACTERISTIC in CUSTOM SERVICE and write something");
-  Serial.println("5- See the magic =)");
-//  pinMode(led, OUTPUT);
-//  digitalWrite(led, LOW);
+  //SETUP NORMAL  
+  SerialBT.begin("Venturi5"); //Bluetooth device name
+  Serial.println("The device started, now you can pair it with bluetooth!");
 
-  BLEDevice::init("MyESP32");
-  BLEServer *pServer = BLEDevice::createServer();
-
-  BLEService *pService = pServer->createService(SERVICE_UUID);
-
-  BLECharacteristic *pCharacteristic = pService->createCharacteristic(
-                                         CHARACTERISTIC_UUID,
-                                         BLECharacteristic::PROPERTY_READ |
-                                         BLECharacteristic::PROPERTY_WRITE
-                                       );
-
-  pCharacteristic->setCallbacks(new MyCallbacks());
-
-  pCharacteristic->setValue("Hello World");
-  pService->start();
   
-  BLEAdvertising *pAdvertising = pServer->getAdvertising();
-  pAdvertising->start();
-
 }
 
 void loop() {
+  
+  //FRECUENCIA
   portENTER_CRITICAL(&mux);
   Freg =1000000.00/PeriodCount;                       // PeriodCount in 0.000001 of a second
   portEXIT_CRITICAL(&mux);
-//  Serial.print("Frequency   ");Serial.println(Freg);
-  // put your main code here, to run repeatedly: 
-  delay(500);
+
+  //SENSOR
+  int fregInt = Freg;
+  float litros = (0.0004028)*Freg + 0.01664;
+  litros = litros * 60.0;
+
+  //BLUETOOTH
+  if (SerialBT.available()) {
+    entrada = SerialBT.read();
+    Serial.print("Entrando: "); Serial.println(entrada);
+
+    if(entrada == 49){
+      //SerialBT.println("UNO");
+      Serial.println("1 SERIAL");
+      SerialBT.println(litros);
+      Serial.println(fregInt);
+      duty = 70;
+      for(int dutyCycle = 0; dutyCycle <= duty; dutyCycle++){   
+        // changing the LED brightness with PWM
+        ledcWrite(ledChannel, dutyCycle);
+        
+      }
+    }
+
+    if(entrada == 50){
+      //SerialBT.println("2");
+      Serial.println("2 SERIAL");
+      SerialBT.println(litros);
+      Serial.println(fregInt);
+      duty = 50;
+      for(int dutyCycle = 0; dutyCycle <= duty; dutyCycle++){   
+        // changing the LED brightness with PWM
+        ledcWrite(ledChannel, dutyCycle);
+      }
+    }
+
+    if(entrada == 51){
+      //SerialBT.println("3");
+      Serial.println("3 SERIAL");
+      SerialBT.println(litros);
+      Serial.println(fregInt);
+      duty = 30;
+      for(int dutyCycle = 0; dutyCycle <= duty; dutyCycle++){   
+        // changing the LED brightness with PWM
+        ledcWrite(ledChannel, dutyCycle);
+      }
+    }
+
+    if(entrada == 52){
+      //SerialBT.println("4");
+      Serial.println("4 SERIAL");
+      SerialBT.println(litros);
+      Serial.println(fregInt);
+      duty = 10;
+      for(int dutyCycle = 0; dutyCycle <= duty; dutyCycle++){   
+        // changing the LED brightness with PWM
+        ledcWrite(ledChannel, dutyCycle);
+      }
+    }
+
+    if(entrada == 53){
+      //SerialBT.println("5");
+      Serial.println("5 SERIAL");
+      SerialBT.println(litros);
+      Serial.println(fregInt);
+      duty = 5;
+      for(int dutyCycle = 0; dutyCycle <= duty; dutyCycle++){   
+        // changing the LED brightness with PWM
+        ledcWrite(ledChannel, dutyCycle);
+      }
+    }
+
+    if(entrada == 54){
+      //SerialBT.println("6");
+      Serial.println("6 SERIAL");
+      SerialBT.println(litros);
+      Serial.println(fregInt);
+      duty = 0.5;
+      for(int dutyCycle = 0; dutyCycle <= duty; dutyCycle++){   
+        // changing the LED brightness with PWM
+        ledcWrite(ledChannel, dutyCycle);
+      }
+    }
+    
+  }
+  
+  delay(20);
 }
